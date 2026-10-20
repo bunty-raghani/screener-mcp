@@ -18,7 +18,7 @@ from screener_mcp.core import history as hist
 from screener_mcp.core import rag
 from screener_mcp.core.valuation_history import fiscal_year_end, value_at_year_end
 from screener_mcp.parsers.company import (
-    parse_balance_sheet, parse_profit_loss, parse_quarterly_results, parse_shareholding, pledged_pct, split_ttm,
+    parse_profit_loss, parse_quarterly_results, parse_shareholding, pledged_pct, split_ttm,
 )
 from screener_mcp.tools import analysis_tools as at
 from screener_mcp.tools import company_tools as ct

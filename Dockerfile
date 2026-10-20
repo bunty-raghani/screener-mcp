@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 ENV MCP_TRANSPORT=streamable-http
+# Listen on all interfaces inside the container (the default is loopback only).
+ENV MCP_HOST=0.0.0.0
 ENV HF_HOME=/app/.cache/huggingface
 
 # EXPOSE here is documentation only; the app reads PORT/MCP_PORT at runtime.

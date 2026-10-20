@@ -492,7 +492,7 @@ Env vars:
 | `SCREENER_PASSWORD` | Screener.in password | — |
 | `MCP_TRANSPORT` | `stdio` or `streamable-http` | `stdio` |
 | `PORT` / `MCP_PORT` | Port to listen on (HTTP transport only) | `8000` |
-| `MCP_HOST` | Bind address (HTTP transport only) | `0.0.0.0` |
+| `MCP_HOST` | Bind address (HTTP transport only) | `127.0.0.1` (the Docker image sets `0.0.0.0`) |
 | `CHROMA_PERSIST_DIR` | Where the document-analysis vector store is cached | `~/.screener-mcp/chroma_db` |
 
 To get a public HTTPS URL, deploy this to any host that can run a long-lived Python process and terminate TLS for you (Render, Railway, Fly.io, a VM behind a reverse proxy, etc.), then point the client at `https://your-host/mcp`.

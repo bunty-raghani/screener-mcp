@@ -58,7 +58,7 @@ import os
 import re
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
-from .core.envelope import ToolError, ToolResult, error_envelope, to_envelope
+from .core.envelope import ToolError, error_envelope, to_envelope
 from .core.nse_client import NSEError
 from .tools.company_tools import (
     search_company as _search_company,
@@ -169,7 +169,7 @@ MCP_APP_MIME_TYPE = "text/html;profile=mcp-app"
 
 mcp = FastMCP(
     "Screener Stock Research",
-    host=os.getenv("MCP_HOST", "0.0.0.0"),
+    host=os.getenv("MCP_HOST", "127.0.0.1"),
     # Prefer generic PORT/MCP_PORT env vars used by most hosts (Render, Railway, Fly.io, etc.).
     port=int(
         os.getenv("PORT")

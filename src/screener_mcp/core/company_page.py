@@ -298,10 +298,6 @@ async def _get_page(symbol: str, financial_type: str) -> Optional[str]:
     return html
 
 
-def clear_page_cache():
-    _page_cache.clear()
-
-
 def page_has_data(html: str) -> bool:
     """True if the page carries a price or any P&L values.
 

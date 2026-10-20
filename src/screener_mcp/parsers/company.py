@@ -56,11 +56,6 @@ def split_ttm(table: dict[str, Any]) -> tuple[list[str], list[dict], dict[str, s
     return years[:n], [{**r, "values": r["values"][:n]} for r in rows], ttm
 
 
-def _parse_number(text: str) -> str:
-    """Keep numeric strings as-is (Screener uses ₹ crore notation already)."""
-    return _clean(text)
-
-
 def _table_to_list(table: Tag) -> list[dict[str, str]]:
     """Convert an HTML table to a list of row dicts keyed by header."""
     if not table:
@@ -75,14 +70,6 @@ def _table_to_list(table: Tag) -> list[dict[str, str]]:
                 row[h] = cells[i] if i < len(cells) else ""
             rows.append(row)
     return rows
-
-
-def _section_table(soup: BeautifulSoup, section_id: str) -> list[dict[str, str]]:
-    section = soup.find(id=section_id)
-    if not section:
-        return []
-    table = section.find("table")
-    return _table_to_list(table)
 
 
 def _yearly_table(soup: BeautifulSoup, section_id: str) -> dict[str, Any]:
@@ -397,17 +384,3 @@ def parse_peers(html: str) -> list[dict[str, str]]:
             {"Sector Level": b["label"], "Name": b["value"]} for b in breadcrumb
         ]
     return []
-
-
-def parse_full_page(html: str) -> dict[str, Any]:
-    """Parse everything from a single page load."""
-    return {
-        "overview": parse_overview(html),
-        "profit_loss": parse_profit_loss(html),
-        "balance_sheet": parse_balance_sheet(html),
-        "cash_flow": parse_cash_flow(html),
-        "quarterly_results": parse_quarterly_results(html),
-        "ratios_history": parse_ratios(html),
-        "shareholding": parse_shareholding(html),
-        "peers": parse_peers(html),
-    }

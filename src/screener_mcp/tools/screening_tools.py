@@ -331,7 +331,7 @@ async def screen_stocks(
             query=query,
             hint="Technical-only queries (e.g. 'RSI < 30 AND Price above 200 DMA') run without "
                  "login against an index universe such as nifty500.",
-        )
+        ) from None
 
     if guard_used:
         warnings.append(f"Added '{guard}' to filter out micro-caps — pass min_market_cap=0 to disable, "

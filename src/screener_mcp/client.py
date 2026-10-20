@@ -12,6 +12,7 @@ import os
 import asyncio
 import logging
 import random
+import time
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -38,6 +39,7 @@ _MAX_CONCURRENCY = int(os.getenv("SCREENER_MAX_CONCURRENCY", "3"))
 # requests — so pace requests instead of racing into the limit.
 _MIN_INTERVAL = float(os.getenv("SCREENER_MIN_INTERVAL", "0.25"))
 _MAX_RETRIES = 5
+_LOGIN_RETRY_SECONDS = 60.0
 _RETRYABLE_TRANSPORT = (
     httpx.ConnectError, httpx.ProxyError, httpx.RemoteProtocolError, httpx.ReadError, httpx.TimeoutException,
 )
@@ -46,8 +48,8 @@ _RETRYABLE_TRANSPORT = (
 class ScreenerClient:
     def __init__(self):
         self._client: Optional[httpx.AsyncClient] = None
-        self._csrf_token: Optional[str] = None
         self._logged_in = False
+        self._last_login_attempt: Optional[float] = None  # time.monotonic()
         self._lock = asyncio.Lock()
         self._semaphore = asyncio.Semaphore(_MAX_CONCURRENCY)
         self._pace_lock = asyncio.Lock()
@@ -126,6 +128,13 @@ class ScreenerClient:
         async with self._lock:
             if self._logged_in:
                 return True
+            # A failed login is retried on later calls, but at most once per
+            # _LOGIN_RETRY_SECONDS so a bad password can't hammer Screener.
+            now = time.monotonic()
+            if (self._last_login_attempt is not None
+                    and now - self._last_login_attempt < _LOGIN_RETRY_SECONDS):
+                return False
+            self._last_login_attempt = now
             try:
                 csrf = await self._get_csrf_token()
                 resp = await self._client.post(
@@ -183,11 +192,20 @@ class ScreenerClient:
 
 # Module-level singleton
 _client: Optional[ScreenerClient] = None
+_client_init_lock = asyncio.Lock()
 
 
 async def get_client() -> ScreenerClient:
     global _client
     if _client is None:
-        _client = ScreenerClient()
+        # Publish the singleton only after login finishes, so a concurrent
+        # first caller can't grab a half-initialised, logged-out client.
+        async with _client_init_lock:
+            if _client is None:
+                client = ScreenerClient()
+                await client.login()
+                _client = client
+    elif not _client.logged_in:
+        # Start-up login failed (network blip, Screener hiccup) — try again.
         await _client.login()
     return _client

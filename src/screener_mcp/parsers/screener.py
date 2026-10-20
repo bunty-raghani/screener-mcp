@@ -19,30 +19,6 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
 
 
-def parse_search_results(json_data: list) -> list[dict]:
-    """Parse company search API response."""
-    results = []
-    for item in json_data:
-        results.append({
-            "name": item.get("name", ""),
-            "url": item.get("url", ""),
-            "screener_id": _extract_id(item.get("url", "")),
-        })
-    return results
-
-
-def _extract_id(url: str) -> str:
-    """Extract symbol from URL like /company/TCS/ or /company/TCS/consolidated/"""
-    parts = [p for p in url.strip("/").split("/") if p]
-    if "company" in parts:
-        idx = parts.index("company")
-        if idx + 1 < len(parts):
-            return parts[idx + 1]
-    if parts:
-        return parts[-1]
-    return url
-
-
 def parse_screen_results(html: str) -> dict:
     """
     Parse the stock screener results page.

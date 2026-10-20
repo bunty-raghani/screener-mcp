@@ -380,7 +380,6 @@ async def ask_company_research(
 async def search_market_commentary(
     question: str,
     symbols: list[str],
-    only_cached: bool = True,
     top_k_per_symbol: int = 3,
 ) -> str:
     """
@@ -388,9 +387,9 @@ async def search_market_commentary(
     at once — e.g. "which of these companies mentioned raw material cost
     pressure in their recent earnings calls?"
 
-    By default (only_cached=True) this searches whatever has already been
-    indexed via ask_company_research for each symbol — it does not download new documents, to keep this fast
-    and bounded regardless of how many symbols are passed. Run
+    This searches whatever has already been indexed via ask_company_research
+    for each symbol — it never downloads new documents, to keep it fast and
+    bounded regardless of how many symbols are passed. Run
     ask_company_research(symbol, ...) first for any symbol you want included
     that hasn't been indexed yet.
     """

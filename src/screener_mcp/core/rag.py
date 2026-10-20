@@ -43,11 +43,11 @@ def _get_embedder():
     if _embedder is None:
         try:
             from sentence_transformers import SentenceTransformer
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "sentence-transformers not installed. Run: pip install sentence-transformers\n"
                 "This is required for ask_company_research and search_market_commentary."
-            )
+            ) from err
         _embedder = SentenceTransformer("all-MiniLM-L6-v2")
     return _embedder
 
@@ -81,7 +81,7 @@ def get_index_info(collection_name: str) -> Optional[dict]:
 async def _download_pdf(url: str, force: bool = False) -> tuple[bytes, dict]:
     """Return (pdf bytes, response validators). Disk-cached by URL unless force."""
     _PDF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    url_hash = hashlib.md5(url.encode()).hexdigest()
+    url_hash = hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()
     cache_path = _PDF_CACHE_DIR / f"{url_hash}.pdf"
 
     if cache_path.exists() and not force:
@@ -171,11 +171,11 @@ async def freshness(collection_name: str, url: Optional[str], check_source: bool
 def _parse_pdf_sync(pdf_bytes: bytes) -> list[dict]:
     try:
         import pdfplumber
-    except ImportError:
+    except ImportError as err:
         raise ImportError(
             "pdfplumber not installed. Run: pip install pdfplumber\n"
             "This is required for PDF document analysis."
-        )
+        ) from err
     import io
 
     pages = []

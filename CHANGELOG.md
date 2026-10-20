@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **The HTTP transport now binds to `127.0.0.1` by default** (was `0.0.0.0`),
+  so an unauthenticated server holding your Screener credentials isn't exposed
+  to the network. Set `MCP_HOST=0.0.0.0` to expose it deliberately; the Docker
+  image already does.
+
+### Fixed
+- **First concurrent calls could run logged out.** `get_client()` published the
+  client before login finished, so a parallel first call got an unauthenticated
+  client and fundamental screens failed with "login required".
+- **A failed start-up login was never retried**, leaving the server in public
+  mode until restart. It now retries on later calls, at most once a minute.
+- `search_market_commentary` no longer has an `only_cached` parameter — it
+  never did anything; the tool never downloads documents.
+- Re-raised errors keep their original cause, and two silently swallowed
+  exceptions now log at debug level.
+
+### Removed
+- Dead code: `parse_full_page`, `parse_search_results`, `clear_page_cache`,
+  `TechFilter.describe` and a few private helpers.
+
 ## 0.5.0 — 2026-09-26
 
 Fixes from a full real-user test pass, and a consolidation of the tool

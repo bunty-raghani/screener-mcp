@@ -14,6 +14,7 @@ Research tools that go beyond trailing numeric screening:
 """
 
 import asyncio
+import logging
 import re
 import statistics
 from datetime import datetime, timedelta
@@ -27,6 +28,8 @@ from ..core.nse_client import NSEError, get_nse_client
 from ..core.quality import is_financial, overview_field
 from ..core.yahoo import YahooError, get_yahoo_client, raw
 from ..parsers.company import parse_overview, parse_profit_loss, parse_ratios, parse_shareholding
+
+logger = logging.getLogger(__name__)
 
 MAX_RELATIVE_SYMBOLS = 20
 
@@ -212,7 +215,7 @@ async def get_moat_signals(symbol: str) -> ToolResult:
             if alt["years_of_history"] > durability["years_of_history"]:
                 durability = {**alt, "statement_basis": "standalone (longer history than consolidated)"}
         except Exception:
-            pass
+            logger.debug("standalone history lookup for %s failed", page.symbol, exc_info=True)
     durability.setdefault("statement_basis", page.financial_type)
 
     signals = {}

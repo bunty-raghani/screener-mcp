@@ -98,7 +98,7 @@ async def fetch_news(query: str, days: int) -> list[dict]:
         root = ET.fromstring(resp.content)
     except (httpx.HTTPError, ET.ParseError) as e:
         raise ToolError(f"Google News search failed ({type(e).__name__}) — this is a feed failure, "
-                        "not an absence of news.", "upstream_unavailable", source="google_news")
+                        "not an absence of news.", "upstream_unavailable", source="google_news") from e
 
     items, seen = [], set()
     for it in root.iter("item"):

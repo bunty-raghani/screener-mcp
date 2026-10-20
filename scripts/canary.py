@@ -52,7 +52,7 @@ async def screener_reachable():
         raise AssertionError(
             f"Screener.in unreachable ({type(e).__name__}: {e}). This is connectivity or blocking, "
             "not a parser change — parser checks were skipped."
-        )
+        ) from e
 
 
 async def overview_consolidated():

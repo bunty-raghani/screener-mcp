@@ -23,11 +23,11 @@ class VectorStore:
         if self._client is None:
             try:
                 import chromadb
-            except ImportError:
+            except ImportError as err:
                 raise ImportError(
                     "chromadb not installed. Run: pip install chromadb\n"
                     "This is required for document analysis (ask_company_research, search_market_commentary)."
-                )
+                ) from err
             self.persist_dir.mkdir(parents=True, exist_ok=True)
             self._client = chromadb.PersistentClient(path=str(self.persist_dir))
         return self._client
@@ -92,7 +92,7 @@ class VectorStore:
         try:
             self._get_client().delete_collection(name)
         except Exception:
-            pass
+            logger.debug("delete_collection(%s) failed", name, exc_info=True)
 
     def count(self, collection_name: str) -> int:
         try:

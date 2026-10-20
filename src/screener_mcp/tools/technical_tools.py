@@ -80,9 +80,6 @@ class TechFilter:
     lhs: Optional[str] = None  # for level comparisons: "price" | "dma20" | ...
     rhs: Optional[str] = None
 
-    def describe(self) -> str:
-        return self.text
-
     def evaluate(self, t: dict) -> Optional[bool]:
         """True/False, or None if the metric couldn't be computed."""
         if self.metric == "level":
