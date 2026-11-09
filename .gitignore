@@ -21,6 +21,7 @@ env/
 .env
 *.env
 start_server.sh
+opencode.json
 
 # IDE
 .vscode/

@@ -36,9 +36,17 @@ EXPECTED_TOOLS = {
     "screen_stocks",
     "get_52_week_low_candidates",
     "compare_to_sector",
+    "get_industry_overview",
+    "track_screen_changes",
     "get_recent_news",
     "get_analyst_targets",
     "get_relative_valuation",
+    "get_valuation_bands",
+    "value_scenarios",
+    "analyze_earnings_quality",
+    "get_related_party_transactions",
+    "get_cost_structure",
+    "get_price_returns",
     "get_moat_signals",
     "get_forward_outlook",
     "screen_by_theme",
@@ -46,18 +54,27 @@ EXPECTED_TOOLS = {
     "get_document_list",
     "ask_company_research",
     "search_market_commentary",
+    "compare_management_commentary",
     # Corporate events
     "get_company_announcements",
+    "search_announcements",
+    "get_corporate_actions",
+    "get_earnings_calendar",
     "get_bulk_deals",
     "get_insider_trading",
     # Market & research
     "get_commodity_prices",
     "notebook_ai",
-    # Portfolio
+    # Portfolio & watchlist
     "add_portfolio_stock",
     "update_portfolio_stock",
     "remove_portfolio_stock",
     "get_portfolio",
+    "get_portfolio_review",
+    "add_watchlist_stock",
+    "remove_watchlist_stock",
+    "get_watchlist",
+    "get_watchlist_feed",
 }
 
 

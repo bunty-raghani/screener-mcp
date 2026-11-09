@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "screener-mcp"
-version = "0.5.0"
+version = "0.6.0"
 description = "Indian Stock Research MCP server powered by Screener.in"
 readme = "README.md"
 license = { text = "MIT" }
@@ -21,18 +21,18 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
 ]
 dependencies = [
-    "mcp>=1.0.0,<2.0.0",
-    "httpx>=0.27.0",
-    "beautifulsoup4>=4.12.0",
-    "lxml>=5.0.0",
+    "mcp>=2.3.0,<3.0.0",
+    "httpx>=0.28.1",
+    "beautifulsoup4>=4.15.0",
+    "lxml>=6.1.3",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest>=9.2.0", "pytest-asyncio>=1.4.1"]
 ai = [
-    "pdfplumber>=0.11.0",
-    "chromadb>=0.5.0",
-    "sentence-transformers>=3.0.0",
+    "pdfplumber>=0.11.10",
+    "chromadb>=1.5.9",
+    "sentence-transformers>=6.2.0",
 ]
 
 [project.urls]
@@ -52,3 +52,4 @@ screener_mcp = ["ui/*.html", "ui/*.js", "ui/*.LICENSE"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "module"

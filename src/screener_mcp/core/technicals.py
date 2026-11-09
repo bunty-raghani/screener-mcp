@@ -82,6 +82,16 @@ def _cache_path(company_id: str) -> Path:
     return _CACHE_DIR / f"{company_id}.json"
 
 
+def _resolution(days: int) -> str:
+    """Screener serves daily bars up to ~400 days and weekly bars beyond it.
+
+    A cached weekly payload must never satisfy a short daily request (that
+    would silently turn 14-day RSI into 14-week RSI), so the cache only
+    answers requests in the same resolution bucket.
+    """
+    return "daily" if days <= 400 else "weekly"
+
+
 def _cache_get(company_id: str, days: int) -> Optional[dict]:
     hit = _memory_cache.get(company_id)
     if hit is None:
@@ -92,6 +102,8 @@ def _cache_get(company_id: str, days: int) -> Optional[dict]:
         except (OSError, ValueError, KeyError):
             return None
     fetched_at, cached_days, payload = hit
+    if _resolution(cached_days) != _resolution(days):
+        return None
     if cached_days >= days and cache_is_fresh(fetched_at):
         return payload
     return None
@@ -102,7 +114,9 @@ def _cache_put(company_id: str, days: int, payload: dict):
     _memory_cache[company_id] = (now, days, payload)
     try:
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        _cache_path(company_id).write_text(json.dumps({"fetched_at": now, "days": days, "payload": payload}))
+        _cache_path(company_id).write_text(json.dumps({
+            "fetched_at": now, "days": days, "resolution": _resolution(days), "payload": payload,
+        }))
     except OSError as e:
         logger.debug("price cache write failed for %s: %s", company_id, e)
 

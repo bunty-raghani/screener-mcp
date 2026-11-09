@@ -52,13 +52,30 @@ def _row(r: dict) -> dict:
         "symbol": m.group(1).upper() if m else None,
         "name": r.get("Company") or r.get("Name"),
         "company_id": r.get("_company_id"),
+        "price": to_number(r.get("Current Price")),
         "pe": to_number(r.get("Price to Earning")),
         "market_cap": to_number(r.get("Market Capitalization")),
-        "roce": to_number(r.get("Return on capital employed")),
+        "dividend_yield": to_number(r.get("Dividend yield")),
+        "net_profit_qtr": to_number(r.get("Net Profit latest quarter")),
+        "profit_growth_yoy": to_number(r.get("YOY Quarterly profit growth")),
         "sales_qtr": to_number(r.get("Sales latest quarter")),
         "sales_growth_yoy": to_number(r.get("YOY Quarterly sales growth")),
-        "dividend_yield": to_number(r.get("Dividend yield")),
+        "roce": to_number(r.get("Return on capital employed")),
+        "industry_pe": to_number(r.get("Industry PE")),
+        "pat": to_number(r.get("Profit after tax")),
+        "book_value": to_number(r.get("Book value")),
+        "pb": to_number(r.get("Price to book value")),
     }
+
+
+def _page_name(html: str) -> Optional[str]:
+    """'IT - Software Companies' → 'IT - Software'."""
+    soup = BeautifulSoup(html, "lxml")
+    h1 = soup.find("h1")
+    if not h1:
+        return None
+    name = re.sub(r"\s+", " ", h1.get_text(" ", strip=True)).strip()
+    return re.sub(r"\s+Companies$", "", name, flags=re.I) or None
 
 
 async def fetch_industry(url: str, max_pages: int = 6, by: str = "sales") -> dict:
@@ -90,25 +107,28 @@ async def fetch_industry(url: str, max_pages: int = 6, by: str = "sales") -> dic
         client = await get_client()
         sort = "sales latest quarter" if by == "sales" else "market capitalization"
 
-        async def page(n: int) -> dict:
+        async def page(n: int) -> tuple[dict, str]:
             params = {"sort": sort, "order": "desc"}
             if n > 1:
                 params["page"] = str(n)
-            return parse_screen_results(await client.get_html(url, params=params))
+            html = await client.get_html(url, params=params)
+            return parse_screen_results(html), html
 
-        first = await page(1)
+        first, first_html = await page(1)
         total_pages = first.get("total_pages") or 1
         pages = [first]
         if by == "sales":
             if total_pages > 1:
-                pages += await asyncio.gather(*[page(n) for n in range(2, min(total_pages, max_pages) + 1)])
+                extra = await asyncio.gather(*[page(n) for n in range(2, min(total_pages, max_pages) + 1)])
+                pages += [p for p, _ in extra]
         else:
             while len(pages) < min(total_pages, max_pages):
                 last = pages[-1].get("companies") or []
                 smallest = to_number(last[-1].get("Market Capitalization")) if last else None
                 if smallest is None or smallest < MEDIAN_MIN_MCAP:
                     break
-                pages.append(await page(len(pages) + 1))
+                nxt, _ = await page(len(pages) + 1)
+                pages.append(nxt)
         rows, seen = [], set()
         for p in pages:
             for r in p.get("companies", []):
@@ -118,6 +138,7 @@ async def fetch_industry(url: str, max_pages: int = 6, by: str = "sales") -> dic
                     rows.append(row)
         result = {
             "url": url,
+            "name": _page_name(first_html),
             "sorted_by": by,
             "total_pages": total_pages,
             "pages_fetched": len(pages),

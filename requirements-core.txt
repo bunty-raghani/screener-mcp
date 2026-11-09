@@ -1,9 +1,9 @@
 # Core dependencies only — no document-analysis tools (ask_company_research,
-# search_market_commentary).
+# search_market_commentary, compare_management_commentary).
 #
 # Use this for a lightweight deploy where the full [ai] extras (pdfplumber,
 # chromadb, sentence-transformers — heavy, pulls in torch) aren't practical.
-mcp>=1.0.0,<2.0.0
-httpx>=0.27.0
-beautifulsoup4>=4.12.0
-lxml>=5.0.0
+mcp>=2.3.0,<3.0.0
+httpx>=0.28.1
+beautifulsoup4>=4.15.0
+lxml>=6.1.3

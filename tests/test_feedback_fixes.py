@@ -171,7 +171,7 @@ async def test_bulk_deals_by_name_across_market(monkeypatch):
             {"symbol": "EPL", "clientName": "SOMEONE ELSE", "buySell": "SELL"}]
 
     class Fake:
-        async def get_bulk_deals(self, from_date, to_date, symbol=None):
+        async def get_bulk_deals(self, from_date, to_date, symbol=None, option_type="bulk_deals"):
             return rows, [], 30
 
     async def fake_client():

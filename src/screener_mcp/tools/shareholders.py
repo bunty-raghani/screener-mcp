@@ -39,19 +39,24 @@ def _coverage(days: int, days_queried: int, failed: list[str]) -> tuple[list[str
     return warnings, partial, reason
 
 
-async def get_bulk_deals(symbol: str = "", name: str = "", days: int = 30) -> ToolResult:
+async def get_bulk_deals(symbol: str = "", name: str = "", days: int = 30,
+                         deal_type: str = "bulk") -> ToolResult:
     """
-    NSE bulk deals (single trades > 0.5% of equity), filtered by company,
-    by investor name, or both.
+    NSE bulk or block deals, filtered by company, by investor name, or both.
 
     symbol: restrict to one company's deals
     name: partial client name to match ("Jhunjhunwala", "SBI Mutual Fund")
+    deal_type: "bulk" (trades > 0.5% of equity) or "block" (single negotiated
+               trades reported by the exchange)
     """
     symbol, name = (symbol or "").strip(), (name or "").strip()
     if not symbol and not name:
         raise ToolError("Pass a `symbol` (one company's deals), a `name` (one investor's deals), or both.",
                         "invalid_input")
+    if deal_type not in ("bulk", "block"):
+        raise ToolError("deal_type must be 'bulk' or 'block'.", "invalid_input")
     days = max(1, min(int(days or 30), 365))
+    option_type = "block_deals" if deal_type == "block" else "bulk_deals"
 
     warnings, meta, nse_symbol = [], {}, None
     if symbol:
@@ -60,7 +65,8 @@ async def get_bulk_deals(symbol: str = "", name: str = "", days: int = 30) -> To
     nse = await get_nse_client()
     to_date = datetime.now().strftime("%d-%m-%Y")
     from_date = (datetime.now() - timedelta(days=days)).strftime("%d-%m-%Y")
-    deals, failed, days_queried = await nse.get_bulk_deals(from_date, to_date, symbol=nse_symbol)
+    deals, failed, days_queried = await nse.get_bulk_deals(
+        from_date, to_date, symbol=nse_symbol, option_type=option_type)
 
     searched = len(deals)
     if name:
@@ -72,14 +78,15 @@ async def get_bulk_deals(symbol: str = "", name: str = "", days: int = 30) -> To
         scope = " ".join(filter(None, [f"by '{name}'" if name else "",
                                        f"in {nse_symbol}" if nse_symbol else "across NSE"]))
         warnings.append(
-            f"No bulk deals {scope} among {searched} deal(s) on the {days_queried} day(s) searched. "
-            "The NSE feed responded, so this is a real empty result — bulk deals only cover single trades "
-            "> 0.5% of equity; use get_shareholding_pattern for gradual accumulation."
+            f"No {deal_type} deals {scope} among {searched} deal(s) on the {days_queried} day(s) searched. "
+            "The NSE feed responded, so this is a real empty result — use get_shareholding_pattern for "
+            "gradual accumulation, or widen `days`."
         )
     return ToolResult(
         data={
             "symbol": nse_symbol,
             "name": name or None,
+            "deal_type": deal_type,
             "period": {"from": from_date, "to": to_date, "days_searched": days_queried},
             "deals_searched": searched,
             "count": len(deals),

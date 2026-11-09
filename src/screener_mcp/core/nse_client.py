@@ -134,8 +134,48 @@ class NSEClient:
             for item in items
         ]
 
-    async def _get_bulk_deals_for_day(self, date_str: str, symbol: str = None) -> list[dict]:
-        params = {"optionType": "bulk_deals", "from": date_str, "to": date_str}
+    async def get_corporate_actions(self, from_date: str, to_date: str) -> list[dict]:
+        """NSE corporate actions (dividends, splits, bonus, rights, buybacks).
+
+        Dates are DD-MM-YYYY. Raises NSEError on failure.
+        """
+        data = await self.get_json(
+            "/api/corporates-corporateActions",
+            params={"index": "equities", "from_date": from_date, "to_date": to_date},
+        )
+        return data if isinstance(data, list) else (data.get("data", []) if isinstance(data, dict) else [])
+
+    async def get_event_calendar(self) -> list[dict]:
+        """NSE board-meeting / results / AGM calendar, market-wide."""
+        data = await self.get_json("/api/event-calendar", params={"index": "equities"})
+        return data if isinstance(data, list) else (data.get("data", []) if isinstance(data, dict) else [])
+
+    async def get_market_announcements(self, from_date: str, to_date: str) -> list[dict]:
+        """Market-wide corporate announcements for a date range (DD-MM-YYYY)."""
+        data = await self.get_json(
+            "/api/corporate-announcements",
+            params={"index": "equities", "from_date": from_date, "to_date": to_date},
+        )
+        items = data.get("data", []) if isinstance(data, dict) else (data or [])
+        return [
+            {
+                "date": item.get("an_dt", ""),
+                "sort_date": item.get("sort_date", ""),
+                "symbol": item.get("symbol", ""),
+                "company": item.get("sm_name", ""),
+                "industry": item.get("smIndustry", ""),
+                "nse_category": item.get("desc", ""),
+                "headline": item.get("attchmntText", ""),
+                "url": item.get("attchmntFile", ""),
+                "seq_id": item.get("seq_id", ""),
+                "has_xbrl": item.get("hasXbrl"),
+            }
+            for item in items
+        ]
+
+    async def _get_bulk_deals_for_day(self, date_str: str, symbol: str = None,
+                                      option_type: str = "bulk_deals") -> list[dict]:
+        params = {"optionType": option_type, "from": date_str, "to": date_str}
         if symbol:
             params["symbol"] = symbol.upper()
         data = await self.get_json("/api/historicalOR/bulk-block-short-deals", params=params)
@@ -163,9 +203,9 @@ class NSEClient:
     MAX_BULK_DEAL_DAYS = 90
 
     async def get_bulk_deals(
-        self, from_date: str, to_date: str, symbol: str = None
+        self, from_date: str, to_date: str, symbol: str = None, option_type: str = "bulk_deals"
     ) -> tuple[list[dict], list[str], int]:
-        """Fetch NSE bulk deals (trades > 0.5% of equity) for a date range.
+        """Fetch NSE bulk or block deals for a date range.
 
         Returns (rows, failed_dates, days_queried). Only the most recent
         `MAX_BULK_DEAL_DAYS` calendar days of the requested range are queried
@@ -183,7 +223,7 @@ class NSEClient:
 
         async def _fetch(d: str) -> list[dict]:
             async with sem:
-                return await self._get_bulk_deals_for_day(d, symbol)
+                return await self._get_bulk_deals_for_day(d, symbol, option_type)
 
         results = await asyncio.gather(*[_fetch(d) for d in dates], return_exceptions=True)
         failed = [d for d, r in zip(dates, results) if isinstance(r, Exception)]

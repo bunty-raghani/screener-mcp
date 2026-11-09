@@ -3,13 +3,14 @@
 # For a lightweight install, use requirements-core.txt instead.
 #
 # Core
-mcp>=1.0.0,<2.0.0
-httpx>=0.27.0
-beautifulsoup4>=4.12.0
-lxml>=5.0.0
+mcp>=2.3.0,<3.0.0
+httpx>=0.28.1
+beautifulsoup4>=4.15.0
+lxml>=6.1.3
 
-# Document analysis (optional — required for ask_company_research, search_market_commentary)
+# Document analysis (optional — required for ask_company_research,
+# search_market_commentary, compare_management_commentary)
 # Install with: pip install screener-mcp[ai]   or   pip install pdfplumber sentence-transformers chromadb
-pdfplumber>=0.11.0
-chromadb>=0.5.0
-sentence-transformers>=3.0.0
+pdfplumber>=0.11.10
+chromadb>=1.5.9
+sentence-transformers>=6.2.0

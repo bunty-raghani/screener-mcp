@@ -1,7 +1,7 @@
 """
 Screener.in MCP Server — Indian Stock Research Assistant
 
-Tools exposed to Claude (30 total):
+Tools exposed to Claude (47 total):
   search_company              — find a company by name or symbol
   get_company_overview        — key ratios, about, price data
   get_financials              — P&L / Balance Sheet / Cash Flow / Ratios history (incl. P/E, P/B, ROE, D/E)
@@ -12,26 +12,43 @@ Tools exposed to Claude (30 total):
   screen_stocks               — Screener.in query + technical clauses, AND/OR/parentheses, junk filtering
   get_52_week_low_candidates  — quality stocks near their 52-week low, in one call
   compare_to_sector           — stock's move vs its sector index and Nifty 50
+  get_industry_overview       — industry medians, distribution, leaders and a stock's position
+  track_screen_changes        — snapshot/diff a screen over time (local screen alerts)
   get_recent_news             — recent news headlines (Google News)
   get_analyst_targets         — consensus target price + broker targets in recent headlines
   get_relative_valuation      — P/E and ROCE vs industry median, up to 20 stocks at once
+  get_valuation_bands         — current P/E, P/B, EV/EBITDA, MCap/Sales vs own 5/10-year range
+  value_scenarios             — forward scenario + the growth/exit P/E today's price implies
+  analyze_earnings_quality    — CFO/PAT, accruals, working capital, other-income dependence
+  get_related_party_transactions — governance check: RPTs by party and year
+  get_cost_structure          — material/employee/other expense mix and its drivers
+  get_price_returns           — point-to-point return, CAGR and drawdown vs an index
   get_moat_signals            — revenue share / rank / HHI + ROCE, margin, promoter durability
   get_forward_outlook         — analyst estimates, order wins, capex filings, management guidance
   screen_by_theme             — pre-built thematic screens (criteria in the tool description)
   get_full_analysis           — ALL data for deep-dive reasoning
   analyze_red_flags           — rule-based red-flag checks over the full history
-  get_document_list           — list annual reports and earnings call transcripts
+  get_document_list           — list annual reports, earnings call transcripts, PPTs and recordings
   ask_company_research        — semantic search over annual reports / earnings calls (all, one type, or one document)
   search_market_commentary    — semantic search for a question across multiple companies' indexed documents
+  compare_management_commentary — same question across companies, side by side with citations
   get_company_announcements   — NSE corporate announcements, incl. credit and ESG rating actions
-  get_bulk_deals              — NSE bulk deals by company, by investor name, or both
+  search_announcements        — market-wide NSE announcement search by keyword/category/materiality
+  get_corporate_actions       — NSE dividends, splits, bonus, rights, buybacks and ex-dates
+  get_earnings_calendar       — NSE results/board-meeting/AGM calendar
+  get_bulk_deals              — NSE bulk or block deals by company, by investor name, or both
   get_insider_trading         — SEBI PIT promoter/KMP/designated-person trade disclosures
   get_commodity_prices        — international benchmark price + exposed Indian companies
   notebook_ai                 — save and summarize investment research notes
   add_portfolio_stock         — add/merge a holding into your local portfolio
   update_portfolio_stock      — correct quantity/avg price on an existing holding
   remove_portfolio_stock      — remove a holding entirely
-  get_portfolio                — view holdings with live P&L and weights
+  get_portfolio               — view holdings with live P&L and weights
+  get_portfolio_review        — portfolio P&L + events, results dates and price moves
+  add_watchlist_stock         — add a company to the local watchlist
+  remove_watchlist_stock      — remove a company from the watchlist
+  get_watchlist               — list the saved watchlist
+  get_watchlist_feed          — events, announcements and price moves across the watchlist
 
 Resources:
   screener://analyst-guide    — how to use this assistant
@@ -57,7 +74,7 @@ import httpx
 import os
 import re
 from pathlib import Path
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from .core.envelope import ToolError, error_envelope, to_envelope
 from .core.nse_client import NSEError
 from .tools.company_tools import (
@@ -96,7 +113,30 @@ from .tools.documents import (
     get_document_list as _get_document_list,
     ask_company_research as _ask_company_research,
     search_market_commentary as _search_market_commentary,
+    compare_management_commentary as _compare_management_commentary,
 )
+from .tools.valuation_tools import (
+    get_valuation_bands as _get_valuation_bands,
+    value_scenarios as _value_scenarios,
+    get_price_returns as _get_price_returns,
+)
+from .tools.cost_tools import get_cost_structure as _get_cost_structure
+from .tools.quality_tools import analyze_earnings_quality as _analyze_earnings_quality
+from .tools.governance_tools import get_related_party_transactions as _get_related_party_transactions
+from .tools.event_tools import (
+    get_corporate_actions as _get_corporate_actions,
+    get_earnings_calendar as _get_earnings_calendar,
+    search_announcements as _search_announcements,
+)
+from .tools.industry_tools import get_industry_overview as _get_industry_overview
+from .tools.watchlist import (
+    add_watchlist_stock as _add_watchlist_stock,
+    remove_watchlist_stock as _remove_watchlist_stock,
+    get_watchlist as _get_watchlist,
+    get_watchlist_feed as _get_watchlist_feed,
+    get_portfolio_review as _get_portfolio_review,
+)
+from .tools.screen_tracker import track_screen_changes as _track_screen_changes
 from .tools.announcements import get_company_announcements as _get_announcements
 from .tools.shareholders import get_bulk_deals as _get_bulk_deals
 from .tools.insider_trading import get_insider_trading as _get_insider_trading
@@ -167,15 +207,8 @@ STOCK_COMPARISON_WIDGET_URI = "ui://screener/stock-comparison.html"
 MCP_APP_MIME_TYPE = "text/html;profile=mcp-app"
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "Screener Stock Research",
-    host=os.getenv("MCP_HOST", "127.0.0.1"),
-    # Prefer generic PORT/MCP_PORT env vars used by most hosts (Render, Railway, Fly.io, etc.).
-    port=int(
-        os.getenv("PORT")
-        or os.getenv("MCP_PORT")
-        or "8000"
-    ),
     instructions="""
 You are an expert Indian equity analyst with deep knowledge of Indian stock markets,
 Screener.in data, and long-term investing principles.
@@ -411,6 +444,60 @@ async def compare_to_sector(symbol: str, days: int = 30, benchmark: str = "") ->
       compare_to_sector("HDFCBANK", benchmark="private_bank")
     """
     return await _safe(_compare_to_sector)(symbol, days, benchmark)
+
+
+@mcp.tool(annotations={"title": "Industry Overview", "readOnlyHint": True, "openWorldHint": True})
+async def get_industry_overview(industry: str = "", symbol: str = "",
+                                top_n: int = 15, max_pages: int = 8) -> dict:
+    """
+    The whole industry in one view: how many listed companies, median P/E,
+    P/B, ROCE, growth, margin and dividend yield, the P/E and ROCE
+    distribution, the market-cap leaders, quality-at-a-reasonable-price names,
+    growth leaders, the cheapest/most expensive names, and where a given stock
+    sits (market-cap rank, P/E and ROCE vs median, revenue share).
+
+    `industry` accepts a leaf Screener industry name ("Specialty Chemicals",
+    "Pharmaceuticals", "Cement & Cement Products"), a Screener industry URL,
+    or a company symbol. Broad names such as "IT - Software" are not in
+    Screener's public /market/ index — pass a representative `symbol` (e.g.
+    "TCS") instead, and the company's broad-industry classification is used.
+
+    Medians exclude companies below ₹500 Cr and non-positive/ >500x P/E.
+    `max_pages` caps how much of a large industry is fetched (25 rows a page).
+
+    Examples:
+      get_industry_overview(symbol="TCS")
+      get_industry_overview("Specialty Chemicals")
+      get_industry_overview("Cement & Cement Products", top_n=20)
+    """
+    return await _safe(_get_industry_overview)(industry, symbol, top_n, max_pages)
+
+
+@mcp.tool(annotations={"title": "Track Screen Changes", "readOnlyHint": False, "openWorldHint": True})
+async def track_screen_changes(label: str = "", query: str = "", theme: str = "",
+                               limit: int = 100) -> dict:
+    """
+    Snapshot a stock screen and diff it against the last run — the local
+    equivalent of a Screener email alert. Added names entered the captured
+    result set; removed names left it.
+
+    Run once to create a baseline, then again after results season / a
+    rebalance to see the churn. State lives at
+    ~/.screener-mcp/screen_snapshots.json.
+
+    label: a name for this tracker ("quality_compounder")
+    query: a Screener query (mutually exclusive with theme)
+    theme: one of the pre-built themes (mutually exclusive with query)
+    limit: how many results to capture (10-200, default 100)
+
+    With no arguments, lists all saved trackers.
+
+    Examples:
+      track_screen_changes("quality", theme="high_roce_low_debt", limit=150)
+      track_screen_changes("garp", query="Price to Earning < 25 AND Profit growth 5Years > 15")
+      track_screen_changes()
+    """
+    return await _safe(_track_screen_changes)(label, query, theme, limit)
 
 
 @mcp.tool(annotations={"title": "Get Recent News", "readOnlyHint": True, "openWorldHint": True})
@@ -665,6 +752,150 @@ async def analyze_red_flags(symbol: str, financial_type: str = "consolidated") -
     return await _safe(_red_flags)(symbol, financial_type)
 
 
+# ─── Valuation & Earnings Quality ─────────────────────────────────────────────
+
+@mcp.tool(annotations={"title": "Valuation Bands", "readOnlyHint": True, "openWorldHint": True})
+async def get_valuation_bands(symbol: str, years: int = 10,
+                              financial_type: str = "consolidated") -> dict:
+    """
+    Is the stock cheap or expensive **relative to its own history**?
+
+    Returns the current P/E, P/B, EV/EBITDA and Market Cap/Sales, each with:
+      percentile within the last `years` of daily observations, median, 25th
+      and 75th percentile, min/max, premium/discount to median, and a plain
+      verdict ("cheap vs its own history" … "expensive vs its own history").
+
+    This complements get_relative_valuation: that tool compares a stock with
+    its industry *today*, this one compares it with itself over 5-10 years.
+    A low percentile is not a buy signal — check why the multiple is low.
+
+    symbol: NSE/BSE symbol or company name
+    years: 1-10 (default 10; Screener's chart API holds ~10 years)
+    financial_type: consolidated (default) or standalone
+    """
+    return await _safe(_get_valuation_bands)(symbol, years, financial_type)
+
+
+@mcp.tool(annotations={"title": "Value Scenarios", "readOnlyHint": True, "openWorldHint": True})
+async def value_scenarios(
+    symbol: str,
+    horizon_years: int = 5,
+    sales_growth_pct: float = None,
+    opm_pct: float = None,
+    net_margin_pct: float = None,
+    tax_rate_pct: float = None,
+    exit_pe: float = None,
+    dilution_pct: float = 0.0,
+    model: str = "auto",
+    financial_type: str = "consolidated",
+) -> dict:
+    """
+    Test a valuation scenario, and see what the current price already implies.
+
+    Forward: projects sales, EBITDA/PBT/PAT and EPS over the horizon from your
+    assumptions, then values the final EPS at `exit_pe` — returning implied
+    price, upside and price CAGR.
+
+    Reverse: solves the sales growth (bisection) and the exit P/E that would
+    justify today's price under the same assumptions. That is the more useful
+    question: "what has to be true?"
+
+    Defaults (when omitted): 5-year sales CAGR (or 3-year), latest OPM or net
+    margin, latest tax rate, current P/E. Financial companies automatically
+    use the net-margin model; pass model="operating" to override.
+
+    Inputs are percentages (15 means 15%), not fractions. This is a scenario,
+    not a forecast or target price — the assumptions are printed with it.
+    """
+    return await _safe(_value_scenarios)(
+        symbol, horizon_years, sales_growth_pct, opm_pct, net_margin_pct,
+        tax_rate_pct, exit_pe, dilution_pct, model, financial_type,
+    )
+
+
+@mcp.tool(annotations={"title": "Earnings Quality", "readOnlyHint": True, "openWorldHint": True})
+async def analyze_earnings_quality(symbol: str, years: int = 10) -> dict:
+    """
+    Is reported profit backed by cash? A transparent quality check over the
+    full history, not a black-box score.
+
+    Computes per year: CFO/PAT, CFO/EBITDA, free cash flow/PAT, accrual ratio
+    (profit − CFO ÷ total assets), other income as % of PBT, tax rate, debtor/
+    inventory/payable days and the cash conversion cycle. Flags weak cash
+    conversion, high accruals, negative FCF, working-capital stretch,
+    other-income dependence and persistently low tax rates, with the evidence.
+
+    Returns a 0-100 score and A-E grade for non-financial companies. Banks and
+    NBFCs are not scored — loan/deposit flows make CFO and working-capital days
+    non-comparable; the raw numbers are still shown.
+
+    symbol: NSE/BSE symbol or company name
+    years: 3-12 (default 10)
+    """
+    return await _safe(_analyze_earnings_quality)(symbol, years)
+
+
+@mcp.tool(annotations={"title": "Related Party Transactions", "readOnlyHint": True, "openWorldHint": True})
+async def get_related_party_transactions(symbol: str, years: int = 5,
+                                         financial_type: str = "consolidated") -> dict:
+    """
+    Related-party transactions by party and year, from Screener.in.
+
+    Use it as a governance check: large or growing transactions with
+    promoter-group entities (associates, subsidiaries, key managerial
+    personnel) deserve a closer read of the annual report and the arm's-length
+    pricing disclosure.
+
+    The table mixes income, expense, receivable, payable and financing lines,
+    so rows are not additive. Read the labels, not a total.
+
+    symbol: NSE/BSE symbol or company name
+    years: 1-12 (default 5)
+    financial_type: consolidated (default) or standalone
+    """
+    return await _safe(_get_related_party_transactions)(symbol, years, financial_type)
+
+
+@mcp.tool(annotations={"title": "Cost Structure", "readOnlyHint": True, "openWorldHint": True})
+async def get_cost_structure(symbol: str, period: str = "yearly",
+                             periods: int = 5, include_subitems: bool = True) -> dict:
+    """
+    Why did the operating margin move? Splits expenses into the drivers.
+
+    Returns Material, Employee and Other expenses as % of sales, with
+    sub-items where Screener reports them — raw materials, traded goods,
+    inventory change, advertisement, distribution, packing, power/fuel,
+    travel, etc. — plus YoY percentage-point changes and the biggest mover.
+
+    Percentages are of sales. Sub-items can overlap and need not add up to the
+    parent. 'Other Expenses' is the catch-all, so check its sub-items before
+    attributing a margin move to operating leverage.
+
+    symbol: NSE/BSE symbol or company name
+    period: "yearly" (default) or "quarterly"
+    periods: number of columns, 1-12 (default 5)
+    include_subitems: also fetch the breakdown (default True)
+    """
+    return await _safe(_get_cost_structure)(symbol, period, periods, include_subitems)
+
+
+@mcp.tool(annotations={"title": "Price Returns", "readOnlyHint": True, "openWorldHint": True})
+async def get_price_returns(symbol: str, from_date: str, to_date: str = "",
+                            benchmark: str = "nifty50") -> dict:
+    """
+    Point-to-point return, CAGR and maximum drawdown for a stock, versus an index.
+
+    Use it to answer "how did this stock do from X to Y?" instead of stringing
+    together 1-week/1-month technical fields. `benchmark` accepts a key such as
+    nifty50, nifty500, midcap100, smallcap100, bank, it, auto, pharma, fmcg,
+    metal, realty, energy, defence, chemicals (or "" to skip).
+
+    Long windows use weekly closes from Screener's chart API (daily up to 400
+    days). Prices are not dividend-adjusted. Dates are YYYY-MM-DD.
+    """
+    return await _safe(_get_price_returns)(symbol, from_date, to_date, benchmark)
+
+
 # ─── Document Analysis ────────────────────────────────────────────────────────
 
 @mcp.tool(annotations={"title": "Get Document List", "readOnlyHint": True, "openWorldHint": True})
@@ -747,7 +978,37 @@ async def search_market_commentary(
       search_market_commentary("raw material cost pressure", ["TATASTEEL", "JSWSTEEL", "SAIL"])
       search_market_commentary("management outlook on margins", ["ITC", "HINDUNILVR", "NESTLEIND"])
     """
-    return await _safe(_search_market_commentary)(question, symbols, True, top_k_per_symbol)
+    return await _safe(_search_market_commentary)(question, symbols, top_k_per_symbol)
+
+
+@mcp.tool(annotations={"title": "Compare Management Commentary", "readOnlyHint": True, "openWorldHint": True})
+async def compare_management_commentary(
+    symbols: list[str] | str,
+    question: str,
+    doc_type: str = "all",
+    top_k: int = 3,
+    index_missing: bool = False,
+) -> dict:
+    """
+    Ask the same question of several companies' annual reports/earnings calls
+    and return their answers side by side, with document and page citations.
+
+    This searches documents already indexed by ask_company_research — run that
+    once per symbol first (recommended), or set index_missing=True to index the
+    latest annual report / earnings call on demand (slower: local embeddings).
+
+    symbols: 2-6 symbols (list or comma-separated)
+    question: the common question ("How is AI demand changing?", "What are the
+              key risks?", "What did management say about capex?")
+    doc_type: all | annual_report | earnings_call
+    top_k: excerpts per company
+    index_missing: index the latest document for symbols with no cache
+
+    Requires: pip install pdfplumber sentence-transformers chromadb
+    """
+    return await _safe(_compare_management_commentary)(
+        symbols, question, doc_type, top_k, index_missing,
+    )
 
 
 # ─── Corporate Actions & Events ────────────────────────────────────────────────
@@ -782,16 +1043,19 @@ async def get_company_announcements(
 
 
 @mcp.tool(annotations={"title": "Get Bulk Deals", "readOnlyHint": True, "openWorldHint": True})
-async def get_bulk_deals(symbol: str = "", name: str = "", days: int = 30) -> dict:
+async def get_bulk_deals(symbol: str = "", name: str = "", days: int = 30,
+                         deal_type: str = "bulk") -> dict:
     """
-    NSE bulk deals (single trades > 0.5% of a company's equity) — for one
-    company, for one investor across the market, or both.
+    NSE bulk or block deals — for one company, for one investor across the
+    market, or both.
 
     symbol: restrict to one company ("YESBANK")
     name: partial investor/entity name ("Jhunjhunwala", "SBI Mutual Fund",
           "Nalanda") — matched against the deal's client name
     days: look-back (default 30, max 365; NSE serves one day per request, so
           only the most recent 90 days are searched)
+    deal_type: "bulk" (default; single trades > 0.5% of equity) or "block"
+          (single negotiated trades reported by the exchange)
 
     Pass at least one of symbol / name. Bulk deals miss gradual accumulation —
     for aggregate FII/DII/promoter holdings use get_shareholding_pattern, for
@@ -802,7 +1066,7 @@ async def get_bulk_deals(symbol: str = "", name: str = "", days: int = 30) -> di
       get_bulk_deals(name="Mutual Fund")
       get_bulk_deals("TCS", name="SBI Mutual Fund")
     """
-    return await _safe(_get_bulk_deals)(symbol, name, days)
+    return await _safe(_get_bulk_deals)(symbol, name, days, deal_type)
 
 
 @mcp.tool(annotations={"title": "Get Insider Trading", "readOnlyHint": True, "openWorldHint": True})
@@ -824,6 +1088,84 @@ async def get_insider_trading(symbol: str, days: int = 365) -> dict:
       get_insider_trading("ADANIENT")
     """
     return await _safe(_get_insider_trading)(symbol, days)
+
+
+@mcp.tool(annotations={"title": "Corporate Actions", "readOnlyHint": True, "openWorldHint": True})
+async def get_corporate_actions(symbol: str = "", days: int = 365,
+                                action_type: str = "all", symbols: str = "") -> dict:
+    """
+    Dividends, splits, bonus, rights, buybacks and demergers from NSE, with
+    ex-dates and record dates.
+
+    symbol: one company ("TCS"); or pass symbols="TCS,INFY,WIPRO" for several
+    days: look-back (default 365; upcoming ex-dates in the next 45 days are
+            always included)
+    action_type: all | dividend | split | bonus | rights | buyback | demerger | other
+
+    Use this for ex-date timing, dividend history and split/bonus adjustments.
+    The company page's own corporate-actions modal is premium-gated on
+    Screener; NSE's feed is public.
+
+    Examples:
+      get_corporate_actions("TCS")
+      get_corporate_actions(action_type="dividend", days=90)
+      get_corporate_actions(symbols="TCS,INFY,HDFCBANK")
+    """
+    return await _safe(_get_corporate_actions)(symbol, days, action_type, symbols)
+
+
+@mcp.tool(annotations={"title": "Earnings Calendar", "readOnlyHint": True, "openWorldHint": True})
+async def get_earnings_calendar(symbols: str = "", days: int = 30,
+                                purpose: str = "results") -> dict:
+    """
+    Upcoming board meetings, results dates, AGMs and dividend events from NSE.
+
+    symbols: optional comma-separated list ("TCS,INFY"); omit for the whole
+             market (first 100 events returned)
+    days: look-ahead window, 1-180 (default 30)
+    purpose: all | results (default) | board_meeting | agm | dividend
+
+    Use it with the portfolio/watchlist tools to know when results drop.
+
+    Examples:
+      get_earnings_calendar("TCS,INFY,HDFCBANK")
+      get_earnings_calendar(days=15, purpose="all")
+    """
+    return await _safe(_get_earnings_calendar)(symbols, days, purpose)
+
+
+@mcp.tool(annotations={"title": "Search Announcements", "readOnlyHint": True, "openWorldHint": True})
+async def search_announcements(query: str = "", category: str = "all", days: int = 7,
+                               symbols: str = "", min_materiality: str = "low",
+                               limit: int = 50) -> dict:
+    """
+    Search NSE corporate announcements **across the whole market** — order
+    wins, capacity expansion, credit-rating actions, auditor changes, promoter
+    pledges, fund raises, results, insider filings and more.
+
+    The per-company get_company_announcements tool answers "what did this
+    company file?"; this one answers "who in the market just announced X?" —
+    the idea-generation and early-warning workflow. NSE's feed is public;
+    Screener's equivalent announcements page is premium-gated.
+
+    query: keyword in the headline/company name ("order", "capex", "rating")
+    category: all | order_win | capex | credit_rating | auditor | pledge |
+              resignation | acquisition | buyback | fund_raise | dividend |
+              bonus_split | results | board_meeting | agm | insider_trading |
+              esg_rating | delisting | general
+    days: look-back, 1-90 (default 7)
+    symbols: optional comma-separated restriction (max 30)
+    min_materiality: low | medium | high
+    limit: max filings returned, 1-200 (default 50)
+
+    Examples:
+      search_announcements(category="order_win", days=7)
+      search_announcements("auditor", category="auditor", days=30)
+      search_announcements(category="credit_rating", days=30, min_materiality="high")
+    """
+    return await _safe(_search_announcements)(
+        query, category, days, symbols, min_materiality, limit,
+    )
 
 
 # ─── Commodity Analysis ────────────────────────────────────────────────────────
@@ -962,6 +1304,59 @@ async def get_portfolio() -> dict:
       get_portfolio()
     """
     return await _safe(_get_portfolio)()
+
+
+@mcp.tool(annotations={"title": "Add Watchlist Stock", "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True})
+async def add_watchlist_stock(symbol: str) -> dict:
+    """
+    Add a company to the local watchlist (idempotent). State lives at
+    ~/.screener-mcp/watchlist.json. Use get_watchlist_feed to see what changed.
+
+    symbol: NSE/BSE symbol or company name
+    """
+    return await _safe(_add_watchlist_stock)(symbol)
+
+
+@mcp.tool(annotations={"title": "Remove Watchlist Stock", "readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": False})
+async def remove_watchlist_stock(symbol: str) -> dict:
+    """Remove a company from the local watchlist."""
+    return await _safe(_remove_watchlist_stock)(symbol)
+
+
+@mcp.tool(annotations={"title": "Get Watchlist", "readOnlyHint": True, "openWorldHint": False})
+async def get_watchlist() -> dict:
+    """The saved watchlist with names and when each company was added."""
+    return await _safe(_get_watchlist)()
+
+
+@mcp.tool(annotations={"title": "Watchlist Feed", "readOnlyHint": True, "openWorldHint": True})
+async def get_watchlist_feed(symbols: str = "", days: int = 7) -> dict:
+    """
+    Everything material that changed across the watchlist in one call:
+      upcoming results/board meetings, corporate actions, material
+      announcements (order wins, capex, ratings, auditor changes) and a price
+      snapshot with 1-day/1-week/1-month moves.
+
+    symbols: optional comma-separated override (max 20); default = the saved
+             watchlist
+    days: announcement look-back (1-90, default 7); events look 30 days ahead,
+          corporate actions 90 days back + 45 days ahead
+
+    Use it for a weekly review instead of calling five tools per company.
+    """
+    return await _safe(_get_watchlist_feed)(symbols, days)
+
+
+@mcp.tool(annotations={"title": "Portfolio Review", "readOnlyHint": True, "openWorldHint": True})
+async def get_portfolio_review(days: int = 7) -> dict:
+    """
+    Your portfolio's live P&L plus the same event feed as get_watchlist_feed
+    for every holding: upcoming results, corporate actions, material
+    announcements and 1d/1w/1m price moves. One call for a portfolio review.
+
+    days: announcement look-back (default 7)
+    """
+    return await _safe(_get_portfolio_review)(days)
 
 
 # ─── Resources ────────────────────────────────────────────────────────────────
@@ -1139,12 +1534,29 @@ async def health_check(request):
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
+def http_bind() -> tuple[str, int]:
+    """Host/port for the HTTP transports (SDK v2 moved these off the constructor).
+
+    The default is loopback: an unauthenticated server holding Screener
+    credentials must not be exposed to the network by accident. Docker opts in
+    to 0.0.0.0 via MCP_HOST.
+    """
+    return (
+        os.getenv("MCP_HOST", "127.0.0.1"),
+        int(os.getenv("PORT") or os.getenv("MCP_PORT") or "8000"),
+    )
+
+
 def main():
     # MCP_TRANSPORT=streamable-http to run as a network server (for remote
     # MCP clients that need an HTTP server URL) instead of the default stdio
     # mode used by claude mcp add / local desktop clients.
     transport = os.getenv("MCP_TRANSPORT", "stdio")
-    mcp.run(transport=transport)
+    if transport == "stdio":
+        mcp.run(transport="stdio")
+        return
+    host, port = http_bind()
+    mcp.run(transport=transport, host=host, port=port)
 
 
 if __name__ == "__main__":

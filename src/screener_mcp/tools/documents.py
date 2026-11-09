@@ -94,21 +94,32 @@ def _parse_earnings_calls(html: str) -> list[dict]:
         return transcripts
 
     for li in concalls_box.select("ul.list-links li"):
-        link = next(
-            (a for a in li.find_all("a", href=True) if "transcript" in a.get_text(strip=True).lower()),
-            None,
-        )
+        chips = {a.get_text(strip=True).lower(): a for a in li.find_all("a", href=True)}
+        link = next((a for label, a in chips.items() if "transcript" in label), None)
         if not link:
             continue
         href = link["href"]
         # The period label is the <li>'s leading text, before the chip links.
         period = re.sub(r"\s+", " ", li.get_text(" ", strip=True)).split(" Transcript")[0].strip()
         quarter = re.search(r"Q[1-4]\s*FY?\s*\d{2,4}", period, re.I)
-        url = href if href.startswith("http") else f"https://www.screener.in{href}"
+
+        def chip_url(name: str) -> str:
+            a = chips.get(name)
+            if not a:
+                return ""
+            value = a["href"]
+            return value if value.startswith("http") else f"https://www.screener.in{value}"
+
         transcripts.append({
             "quarter": quarter.group().upper().replace(" ", "") if quarter else period or "Unknown",
             "title": f"Earnings Call Transcript — {period}" if period else "Earnings Call Transcript",
-            "url": url,
+            "url": href if href.startswith("http") else f"https://www.screener.in{href}",
+            "ppt_url": chip_url("ppt") or None,
+            "recording_url": chip_url("rec") or None,
+            "ai_summary_available": any(
+                "ai summary" in b.get_text(" ", strip=True).lower()
+                for b in li.find_all(["a", "button"])
+            ),
             "type": "earnings_call",
             "source": "screener",
         })
@@ -181,7 +192,15 @@ async def get_document_list(symbol: str) -> ToolResult:
                 for r in reports
             ],
             "earnings_calls": [
-                {"quarter": c.get("quarter"), "title": c.get("title"), "url": c.get("url")} for c in calls
+                {
+                    "quarter": c.get("quarter"),
+                    "title": c.get("title"),
+                    "url": c.get("url"),
+                    "ppt_url": c.get("ppt_url"),
+                    "recording_url": c.get("recording_url"),
+                    "ai_summary_available": bool(c.get("ai_summary_available")),
+                }
+                for c in calls
             ],
             "next_step": ("ask_company_research(symbol, question) searches them all; add year=2025 or "
                           "quarter='Q1FY26' for one document, or pdf_url for a link you already have."),
@@ -374,6 +393,110 @@ async def ask_company_research(
         partial=bool(errors),
         reason="Some documents could not be indexed." if errors else None,
         meta=page.meta,
+    )
+
+
+async def compare_management_commentary(
+    symbols: list[str] | str,
+    question: str,
+    doc_type: str = "all",
+    top_k: int = 3,
+    index_missing: bool = False,
+) -> ToolResult:
+    """Ask the same question of several companies and lay the answers side by side.
+
+    By default this searches only documents already indexed through
+    ``ask_company_research`` (fast, deterministic). Set ``index_missing=True``
+    to index the latest annual report / earnings call for symbols that have no
+    cache yet — slower, because the first index builds embeddings locally.
+    """
+    if isinstance(symbols, str):
+        symbols = [s.strip() for s in symbols.split(",") if s.strip()]
+    symbols = [s.strip() for s in symbols if s and s.strip()]
+    if len(symbols) < 2:
+        raise ToolError("Pass at least two symbols to compare management commentary.", "invalid_input")
+    if len(symbols) > 6:
+        symbols = symbols[:6]
+    question = (question or "").strip()
+    if not question:
+        raise ToolError("Pass a question to compare across companies.", "invalid_input")
+    if doc_type not in DOC_TYPES:
+        raise ToolError(f"doc_type must be one of {', '.join(DOC_TYPES)}.", "invalid_input")
+
+    store = get_vector_store()
+    companies, uncached, warnings = [], [], []
+    for raw in symbols:
+        page = await fetch_company_page(raw, "consolidated")
+        symbol = page.symbol
+        collections = store.list_collections(prefix=f"{symbol}_")
+        if doc_type == "annual_report":
+            collections = [c for c in collections if c.endswith("_annual")]
+        elif doc_type == "earnings_call":
+            collections = [c for c in collections if c.endswith("_transcript")]
+
+        if not collections and index_missing:
+            try:
+                docs = await _resolve_documents(page, doc_type, 0, "", "", 1, 1, warnings)
+                for doc in docs:
+                    name = _collection(symbol, doc)
+                    status = await process_document(
+                        doc["url"], name,
+                        extra_metadata={"symbol": symbol, "doc_type": doc["doc_type"], "label": doc["label"]},
+                    )
+                    if status["status"] == "error":
+                        warnings.append(f"{symbol} {_doc_label(doc)}: {status.get('error')}")
+                    else:
+                        collections.append(name)
+            except Exception as e:
+                warnings.append(f"{symbol}: could not index documents ({type(e).__name__}).")
+
+        if not collections:
+            uncached.append(symbol)
+            companies.append({"symbol": symbol, "documents_searched": [], "excerpts": []})
+            continue
+
+        chunks = await query_documents(collections, question, top_k=top_k, top_k_per_collection=top_k)
+        excerpts = [
+            {
+                "document": (
+                    f"{'Annual Report' if c['metadata'].get('doc_type') == 'annual_report' else 'Earnings Call'} "
+                    f"{c['metadata'].get('label', '?')}"
+                ),
+                "pages": c["metadata"].get("pages", "?"),
+                "relevance": c.get("rank_score", c["score"]),
+                "text": excerpt(c["text"], question, EXCERPT_CHARS),
+            }
+            for c in chunks
+        ]
+        companies.append({"symbol": symbol, "documents_searched": collections, "excerpts": excerpts})
+
+    if uncached and not index_missing:
+        warnings.append(
+            "No indexed documents for: " + ", ".join(uncached) + ". Run ask_company_research(symbol, ...) "
+            "for each first, or call this tool with index_missing=True."
+        )
+    lines = [f"# Cross-company commentary — {question}", ""]
+    for company in companies:
+        lines.append(f"## {company['symbol']}")
+        if not company["excerpts"]:
+            lines.append("_No indexed excerpts._")
+        for e in company["excerpts"]:
+            lines.append(f"- **{e['document']}**, pages {e['pages']} (relevance {e['relevance']}): {e['text']}")
+        lines.append("")
+    lines.append(
+        "Compare the companies on the same question; distinguish what management said from what the "
+        "numbers show, and cite the document/page for each claim."
+    )
+    return ToolResult(
+        data={
+            "question": question,
+            "companies": companies,
+            "uncached_symbols": uncached,
+            "report": "\n".join(lines),
+        },
+        warnings=warnings,
+        partial=bool(uncached),
+        reason="Some symbols have no indexed documents." if uncached else None,
     )
 
 

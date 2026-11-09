@@ -76,14 +76,14 @@ If these return real data, the server is working end to end.
 - **Company research** — financials (incl. year-end P/E, P/B, ROE and debt-to-equity history), shareholding trends with promoter/pledge assessment, peer comparison, rule-based red-flag checks (no login required)
 - **Stock screening** — custom Screener.in-style queries with `AND` / `OR` / parentheses, pre-built thematic screens (sector themes start from the companies actually in the sector), and technical clauses (52-week distance, RSI, DMA, volume spikes). Junk rows are filtered out by default. Fundamental screens need a free Screener.in login; technical-only screens don't
 - **Price-action context** — quality stocks near 52-week lows in one call, and a stock's move vs its sector index and the Nifty 50
-- **Valuation & quality context** — P/E and ROCE vs the industry median for up to 20 stocks at once, and moat proxies: revenue share, rank, industry concentration, and how durable returns and margins have been
-- **Forward-looking & Street view** — analyst EPS/revenue estimates and target prices, order wins and capex filings, management guidance from earnings calls, and recent news
-- **Document analysis** — ask questions over annual reports and earnings call transcripts using a local RAG pipeline
-- **Corporate events** — NSE announcements (incl. credit and ESG rating actions), bulk deals by company or investor, insider trading disclosures
+- **Valuation & quality context** — P/E, P/B, EV/EBITDA and Market Cap/Sales vs a stock's own 5/10-year range; forward scenarios and the expectations embedded in the price; earnings-quality checks (CFO/PAT, accruals, working capital); expense-structure drivers; P/E and ROCE vs the industry median and a full industry map; moat proxies
+- **Forward-looking & Street view** — analyst EPS/revenue estimates and target prices, order wins and capex filings, management guidance from earnings calls, and recent news; point-to-point returns, CAGR and drawdown vs an index
+- **Document analysis** — ask questions over annual reports and earnings call transcripts using a local RAG pipeline, or compare several companies' commentary side by side; document listings include PPTs and recordings
+- **Corporate events** — NSE announcements (incl. credit and ESG rating actions), a market-wide announcement search, corporate actions and ex-dates, the results/board-meeting calendar, bulk/block deals, and insider trading disclosures
 - **Market & research** — commodity price context, local research notes
-- **Portfolio** — a private, local holdings tracker with live P&L
+- **Portfolio & watchlist** — private, local holdings and watchlist trackers with live P&L, results dates, corporate actions and a materiality-ranked event feed
 
-30 tools in total — full reference [below](#tools--30-total). Every tool returns the same [response envelope](#response-envelope), so partial or degraded data is always explicit.
+47 tools in total — full reference [below](#tools--47-total). Every tool returns the same [response envelope](#response-envelope), so partial or degraded data is always explicit.
 
 ---
 
@@ -95,8 +95,20 @@ If these return real data, the server is working end to end.
 - **Market vs company-specific** — `"Is this fall sector-wide or just this stock?"` → `compare_to_sector`
 - **What the Street thinks** — `"Analyst targets and recent news for TMPV"` → `get_analyst_targets`, `get_recent_news`
 - **Is it cheap for its sector?** — `"Which of these 15 stocks trade below their industry P/E?"` → `get_relative_valuation`, or `screen_stocks(..., peer_relative=True)`
+- **Is it cheap for itself?** — `"Is TCS cheap versus its own 10-year valuation?"` → `get_valuation_bands`
+- **What is priced in?** — `"What growth is TCS's current price implying?"` → `value_scenarios`
+- **Is the profit real?** — `"Is this 25% profit growth backed by cash?"` → `analyze_earnings_quality`
+- **Why did the margin move?** — `"Why did Asian Paints' operating margin fall?"` → `get_cost_structure`
+- **Industry map** — `"Show me the IT industry and where TCS sits"` → `get_industry_overview(symbol="TCS")`
+- **Income statement vs price** — `"What did TCS do from Jan 2023 to today?"` → `get_price_returns`
 - **Moat check** — `"Is MSUMI a market leader with durable returns?"` → `get_moat_signals`
 - **Future growth** — `"What's the order pipeline and guidance for BEL?"` → `get_forward_outlook`
+- **Market-wide events** — `"Any order wins or rating actions this week?"` → `search_announcements(category="order_win")`, `search_announcements(category="credit_rating")`
+- **Ex-dates** — `"TCS dividend and split history"` → `get_corporate_actions("TCS")`
+- **Results calendar** — `"When do my companies report?"` → `get_earnings_calendar(symbols="TCS,INFY")`
+- **Cross-company commentary** — `"Compare how TCS, Infosys and HCL describe AI demand"` → `compare_management_commentary`
+- **Track a screen** — `"What entered my quality screen since last month?"` → `track_screen_changes`
+- **Weekly watchlist review** — `"What changed across my watchlist this week?"` → `get_watchlist_feed`
 - **Read an annual report** — `"What are the key risks in Reliance's 2024 annual report?"` → `ask_company_research(..., year=2024)`
 - **Read an earnings call** — `"What did TCS say about margins in Q3FY25?"` → `ask_company_research(..., quarter="Q3FY25")`
 - **Across years** — `"How has ITC described cigarette taxation over the years?"` → `ask_company_research(..., doc_type="annual_report")`
@@ -185,7 +197,7 @@ Claude Desktop does **not** inherit your shell environment, so credentials must 
 
 **4.** Quit Claude Desktop completely (**Cmd+Q** on macOS) and reopen it.
 
-**5.** Check the tools icon in the message composer — `screener` should list its 30 tools. Then ask: `"Search for Asian Paints"`.
+**5.** Check the tools icon in the message composer — `screener` should list its 47 tools. Then ask: `"Search for Asian Paints"`.
 
 > Server not showing up? Check **Settings → Developer** for its status, and the logs at `~/Library/Application Support/Claude/logs/mcp-server-screener.log` (macOS) or `%APPDATA%\Claude\logs\` (Windows). Invalid JSON — often a stray trailing comma — makes Claude Desktop skip every server silently.
 
@@ -272,7 +284,7 @@ Never commit real credentials — the values above are placeholders.
 
 ---
 
-## Tools — 30 total
+## Tools — 47 total
 
 Grouped by category. See [Example workflows](#example-workflows) for the ones you'll reach for most.
 
@@ -289,6 +301,17 @@ Grouped by category. See [Example workflows](#example-workflows) for the ones yo
 | `compare_companies` | 2–6 stocks side by side, with point-in-time red flags; interactive dashboard (MCP App) where supported, JSON everywhere | No |
 | `get_full_analysis` | All data combined for deep analysis (same windows as the standalone tools) | No |
 | `analyze_red_flags` | Rule-based red-flag checks over the full history, each with evidence and thresholds | No |
+| `get_related_party_transactions` | Related-party transactions by party and year — a governance check | Yes |
+
+### Valuation & Quality
+
+| Tool | What it does | Data source |
+|------|-------------|:---:|
+| `get_valuation_bands` | Current P/E, P/B, EV/EBITDA and Market Cap/Sales vs their own 5/10-year percentile, median and range | Screener chart API |
+| `value_scenarios` | Forward sales/margin/tax/exit-P/E scenario with implied price and CAGR, plus the growth and exit P/E today's price implies | Existing financials |
+| `analyze_earnings_quality` | CFO/PAT, CFO/EBITDA, FCF/PAT, accrual ratio, cash conversion cycle, other-income dependence; flags + score/grade | Existing statements |
+| `get_cost_structure` | Material/employee/other expense mix and sub-items, with YoY percentage-point changes | Screener schedule API |
+| `get_price_returns` | Point-to-point return, CAGR and maximum drawdown vs an index | Screener chart API |
 
 ### Stock Screening
 
@@ -297,25 +320,31 @@ Grouped by category. See [Example workflows](#example-workflows) for the ones yo
 | `screen_stocks` | Screener.in query plus technical clauses (52W distance, RSI, DMA, volume spike) | Fundamental clauses only |
 | `get_52_week_low_candidates` | Quality filters + proximity to 52-week low, with overview fields per match | No |
 | `get_relative_valuation` | P/E and ROCE vs the industry median for up to 20 stocks at once | No |
+| `get_industry_overview` | Industry medians, P/E and ROCE distribution, leaders, quality-at-a-price names and a stock's position | No |
 | `compare_to_sector` | Stock's return vs its sector index and Nifty 50, with a market-vs-company verdict | No |
 | `screen_by_theme` | Pre-built thematic screens — every theme's criteria are in the tool description | Query themes only |
+| `track_screen_changes` | Snapshot a screen and diff entries/exits since the previous run (local screen alerts) | Same as the screen |
 
 ### Document Analysis
 
 | Tool | What it does | Extra deps needed |
 |------|-------------|:---:|
-| `get_document_list` | List annual reports & earnings call transcripts | No |
+| `get_document_list` | List annual reports, earnings call transcripts, PPTs and recordings | No |
 | `ask_company_research` | Ask a question over a company's annual reports and earnings calls — all recent ones, one `doc_type`, or one document (`year` / `quarter` / `pdf_url`) | Yes |
 | `search_market_commentary` | Search a question across multiple companies' already-indexed documents at once | Yes |
+| `compare_management_commentary` | Ask the same question of 2–6 companies and return their answers side by side, with document/page citations | Yes |
 
-> `ask_company_research` and `search_market_commentary` build on the same cache — the former indexes a company's documents and searches them (one or many); the latter searches only what's *already* indexed across several symbols (good for "which of these companies mentioned Y?").
+> `ask_company_research`, `search_market_commentary` and `compare_management_commentary` build on the same cache — the first indexes a company's documents and searches them; the second searches only what's *already* indexed across several symbols; the third formats those answers side by side. Pass `index_missing=True` to the comparison to index the latest document on demand.
 
 ### Corporate Events
 
 | Tool | What it does | Login needed |
 |------|-------------|:---:|
 | `get_company_announcements` | NSE corporate announcements with category filter — incl. `credit_rating` (CRISIL/ICRA/CARE/India Ratings) and `esg_rating` | No |
-| `get_bulk_deals` | NSE bulk deals by company (`symbol`), by investor (`name`), or both | No |
+| `search_announcements` | Market-wide NSE announcement search by keyword/category/materiality — order wins, capex, ratings, auditor changes, pledges, fund raises | No |
+| `get_corporate_actions` | Dividends, splits, bonus, rights, buybacks and demergers with ex/record dates (one company or several) | No |
+| `get_earnings_calendar` | Upcoming results, board meetings, AGMs and dividend events from NSE | No |
+| `get_bulk_deals` | NSE bulk or block deals by company (`symbol`), by investor (`name`), or both | No |
 | `get_insider_trading` | SEBI PIT promoter/KMP/designated-person trade disclosures, no size threshold (both NSE PIT feeds merged) | No |
 
 ### Market & Research
@@ -337,8 +366,18 @@ Grouped by category. See [Example workflows](#example-workflows) for the ones yo
 | `update_portfolio_stock` | Overwrite quantity/avg price on an existing holding (partial sell, cost correction) | No |
 | `remove_portfolio_stock` | Remove a holding entirely | No |
 | `get_portfolio` | View holdings with live price, P&L (₹ and %), and weight | No |
+| `get_portfolio_review` | Portfolio P&L plus results dates, corporate actions, material announcements and price moves for every holding | No |
 
-> Stored locally at `~/.screener-mcp/portfolio.json` — no account, no external service, nothing leaves your machine.
+### Watchlist
+
+| Tool | What it does | Login needed |
+|------|-------------|:---:|
+| `add_watchlist_stock` | Add a company to the local watchlist (idempotent) | No |
+| `remove_watchlist_stock` | Remove a company from the watchlist | No |
+| `get_watchlist` | List the saved watchlist | No |
+| `get_watchlist_feed` | Upcoming results, corporate actions, material announcements and 1d/1w/1m price moves across the watchlist | No |
+
+> Portfolio and watchlist are stored locally at `~/.screener-mcp/portfolio.json` and `~/.screener-mcp/watchlist.json` — no account, no external service, nothing leaves your machine. Screen trackers live at `~/.screener-mcp/screen_snapshots.json`.
 
 ---
 
@@ -551,7 +590,7 @@ screener-mcp/
 ├── scripts/canary.py               # Daily live check against Screener.in (see .github/workflows/canary.yml)
 ├── tests/                          # Offline tests (no network) + a real-page fixture
 └── src/screener_mcp/
-    ├── server.py                   # FastMCP — all 30 tool definitions
+    ├── server.py                   # MCPServer — all 47 tool definitions
     ├── client.py                   # Screener.in HTTP client + auth
     ├── core/
     │   ├── envelope.py             # Standard response envelope for every tool
@@ -563,7 +602,8 @@ screener-mcp/
     │   ├── industry.py             # Industry pages → medians, revenue share, HHI
     │   ├── nse_client.py           # NSE India API (announcements, filings)
     │   ├── history.py              # Year-by-year series, computed ROE / debt-to-equity, CAGR
-    │   ├── valuation_history.py    # Year-end P/E and P/B from Screener's chart API
+    │   ├── valuation_history.py    # P/E, P/B, EV/EBITDA, MCap/Sales history + percentile bands
+    │   ├── event_categories.py     # Shared NSE announcement classification/materiality
     │   ├── rag.py                  # PDF → chunk → embed → query pipeline
     │   └── vector_store.py         # ChromaDB wrapper
     ├── parsers/
@@ -583,6 +623,14 @@ screener-mcp/
         ├── insider_trading.py      # SEBI PIT insider trading disclosures
         ├── market_tools.py         # Recent news + analyst targets
         ├── research_tools.py       # Relative valuation, moat signals, forward outlook
+        ├── valuation_tools.py      # Valuation bands, scenarios, period returns
+        ├── quality_tools.py        # Earnings-quality checks
+        ├── cost_tools.py           # Expense-structure analysis
+        ├── governance_tools.py     # Related-party transactions
+        ├── event_tools.py          # Corporate actions, earnings calendar, market-wide search
+        ├── industry_tools.py       # Industry overview / position
+        ├── screen_tracker.py       # Screen snapshots + diffs
+        ├── watchlist.py            # Local watchlist + event feed + portfolio review
         ├── commodities.py          # Commodity price analysis
         ├── notebook.py             # Research notes
         └── portfolio.py            # Local portfolio tracker

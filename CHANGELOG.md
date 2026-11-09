@@ -1,8 +1,43 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-11-09
+
+### Added
+- **Valuation & quality tools**: `get_valuation_bands` (P/E, P/B, EV/EBITDA
+  and Market Cap/Sales vs their own 5/10-year percentile), `value_scenarios`
+  (forward scenario plus the growth/exit P/E today's price implies),
+  `analyze_earnings_quality` (CFO/PAT, CFO/EBITDA, accruals, working capital,
+  other-income dependence, with flags and a transparent score),
+  `get_cost_structure` (material/employee/other expense mix and sub-items),
+  `get_related_party_transactions` (governance check) and `get_price_returns`
+  (point-to-point return, CAGR and drawdown vs an index).
+- **Event intelligence from NSE**: `get_corporate_actions` (dividends, splits,
+  bonus, rights, buybacks, ex/record dates), `get_earnings_calendar` (results,
+  board meetings, AGMs) and `search_announcements` (market-wide search by
+  keyword/category/materiality). These cover the Screener features that are
+  premium-gated, using NSE's public feeds.
+- **Industry context**: `get_industry_overview` — medians, P/E and ROCE
+  distribution, market-cap leaders, quality-at-a-price names, growth leaders
+  and a stock's position within its Screener industry.
+- **Monitoring**: `track_screen_changes` snapshots a screen and diffs entries
+  and exits; `add_watchlist_stock`, `remove_watchlist_stock`, `get_watchlist`
+  and `get_watchlist_feed` add a local watchlist with a consolidated event and
+  price feed; `get_portfolio_review` brings the same feed to the portfolio.
+- **Cross-company research**: `compare_management_commentary` asks the same
+  question of 2–6 companies and returns their answers side by side with
+  document/page citations.
+- `get_document_list` now keeps each concall's PPT link, recording link and
+  AI-summary availability instead of discarding the non-transcript chips.
+- `get_bulk_deals` now supports `deal_type="block"` as well as bulk deals.
 
 ### Changed
+- **Dependencies updated to current stable releases**: MCP Python SDK 2.x
+  (`MCPServer`, replacing FastMCP), httpx 0.28, BeautifulSoup 4.15, lxml 6.1,
+  pdfplumber 0.11.10, ChromaDB 1.5 and sentence-transformers 6.2.
+- **Price-history cache now distinguishes daily and weekly bars.** Screener
+  serves daily data up to ~400 days and weekly beyond that; a cached long
+  window could previously satisfy a short request and silently turn 14-day
+  RSI into 14-week RSI.
 - **The HTTP transport now binds to `127.0.0.1` by default** (was `0.0.0.0`),
   so an unauthenticated server holding your Screener credentials isn't exposed
   to the network. Set `MCP_HOST=0.0.0.0` to expose it deliberately; the Docker

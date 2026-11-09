@@ -53,7 +53,7 @@ slides["1-hero"] = page(f"""
 <h1 style="margin-top:34px;font-size:76px">Indian stock research,<br><span class=g>right inside Claude</span></h1>
 <p class=sub style="font-size:26px;margin-top:26px">Live Screener.in, NSE &amp; MCX data for Claude Code and Claude Desktop.<br>Ask in plain English. Get real, current numbers.</p>
 <div style="display:flex;gap:12px;margin-top:40px">
- <span class=pill style="text-transform:none;font-size:18px;color:#f2f5f0">30 MCP tools</span>
+ <span class=pill style="text-transform:none;font-size:18px;color:#f2f5f0">47 MCP tools</span>
  <span class=pill style="text-transform:none;font-size:18px;color:#f2f5f0">No API keys</span>
  <span class=pill style="text-transform:none;font-size:18px;color:#f2f5f0">Python 3.11+</span>
 </div>{FOOT}""")
@@ -108,7 +108,7 @@ groups = [
  ("Portfolio","Local tracker with live P&amp;L"),
 ]
 slides["4-tools"] = page(f"""
-<h2><span class=g>30 tools</span>, one research assistant</h2>
+<h2><span class=g>47 tools</span>, one research assistant</h2>
 <p class=sub>Claude picks the right tool. You just ask.</p>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px">
 {"".join(f'<div class=card style="padding:22px 24px;height:150px"><div style="font-size:21px;font-weight:600">{t}</div><div style="color:#99a396;font-size:16px;margin-top:10px;line-height:1.45">{d}</div></div>' for t,d in groups)}

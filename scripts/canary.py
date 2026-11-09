@@ -172,9 +172,38 @@ async def forward_outlook():
     _check(d.get("analyst_estimates") and d["analyst_estimates"]["years"], "no BEL analyst estimates")
 
 
+async def valuation_bands():
+    d = _ok(await server.get_valuation_bands("TCS", 10), "valuation bands")
+    pe = d["metrics"].get("pe") or {}
+    _check(pe.get("percentile") is not None and pe.get("median") is not None,
+           f"P/E band missing: {d['metrics']}")
+
+
+async def cost_structure():
+    env = await server.get_cost_structure("ASIANPAINT", "yearly", 3)
+    d = _ok(env, "cost structure")
+    labels = {r["label"] for r in d.get("rows", [])}
+    _check({"Material Cost", "Employee Cost", "Other Expenses"} <= labels,
+           f"expense schedule rows changed: {sorted(labels)}")
+    _check(d["latest_mix_pct_of_sales"].get("Material Cost") is not None, "latest material-cost mix blank")
+
+
+async def earnings_quality():
+    d = _ok(await server.analyze_earnings_quality("TCS", 5), "earnings quality")
+    _check(len(d.get("yearly", [])) >= 5, "earnings-quality yearly series short")
+    _check(d["three_year_averages"].get("cfo_pat_pct") is not None, "CFO/PAT not computed")
+
+
+async def industry_overview():
+    d = _ok(await server.get_industry_overview(symbol="TCS", top_n=5), "industry overview")
+    _check(d["medians"].get("median_pe") and d["distribution"].get("pe"), "industry medians missing")
+    _check(d.get("symbol_position") and d["symbol_position"].get("market_cap_rank") == 1,
+           f"TCS position missing: {d.get('symbol_position')}")
+
+
 HARD = [overview_consolidated, overview_standalone_fallback, financial_tables, symbol_resolution,
         technical_screen, sector_compare, peers, relative_valuation, moat_signals, shareholding_and_pledge,
-        sector_theme]
+        sector_theme, valuation_bands, cost_structure, earnings_quality, industry_overview]
 SOFT = [nse_announcements, news_feed, analyst_consensus, forward_outlook]  # third-party feeds: warn, don't fail
 
 
